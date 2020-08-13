@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -92,7 +93,7 @@ func (s *CrawlTestSuite) TestCrawl() {
 		Limit:    0,
 		Verbose:  false,
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	for i := 0; i < crawler.Opts.Parallel; i++ {
 		go func() {
 			crawler.processURLs()
@@ -108,6 +109,23 @@ func (s *CrawlTestSuite) TestCrawl() {
 	s.True(ok)
 	s.Equal(4, count.Words)
 	s.Equal(1, count.Numbers)
+}
+
+func (s *CrawlTestSuite) TestGetNextURLS() {
+	html := `href="/x" href="something.com" href="google.com" href="google.com/x" href="/y"`
+	crawler, err := NewCrawler("https://google.com", &ClientMock{}, &Opts{
+		MaxDepth: 2,
+		Parallel: 1,
+		Limit:    0,
+		Verbose:  false,
+	})
+	s.Require().NoError(err)
+	result := crawler.GetNextURLs(html)
+	s.Require().Equal(3, len(result))
+	s.Equal("https://google.com/x", result[0])
+	s.Equal("https://google.com", result[1])
+	s.Equal("https://google.com/y", result[2])
+	fmt.Println(result)
 }
 
 func TestCrawlTestSuite(t *testing.T) {

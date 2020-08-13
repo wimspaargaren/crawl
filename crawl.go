@@ -329,16 +329,20 @@ func (c *Crawler) GetNextURLs(htmlBody string) []string {
 				continue
 			}
 		} else {
-			_, err := url.Parse(trimmedURL)
-			if err != nil {
+			if strings.HasPrefix(trimmedURL, "/") {
 				// If href just a path append it to the current host
-				trimmedURL = fmt.Sprintf("https://%s", path.Join(c.Host, href[6:len(href)-1]))
-			} else {
+				trimmedURL = path.Join(c.Host, href[6:len(href)-1])
+			}
+			_, err := url.Parse(trimmedURL)
+			if err == nil {
 				trimmedURL = fmt.Sprintf("https://%s", trimmedURL)
 			}
 		}
 		url, err := url.Parse(trimmedURL)
 		if err != nil {
+			continue
+		}
+		if url.Host != c.Host {
 			continue
 		}
 		resMap[fmt.Sprintf("https://%s", path.Join(url.Host, url.Path))] = struct{}{}
