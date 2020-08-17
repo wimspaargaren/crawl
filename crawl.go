@@ -108,39 +108,25 @@ func (c *Crawler) Lookup(url string, depth int) ([]string, error) {
 }
 
 func (c *Crawler) countWordsAndNumbers(url, html string) {
-	count := Count{}
-	contentStart := 0
-	contentEnd := 0
+	if html == "" {
+		c.writeMap(url, &Count{})
+		return
+	}
+	words := strings.Split(html, " ")
+	numbers := 0
 
-	for i := 0; i < len(html); i++ {
-		// nolint: nestif
-		if html[i] == '<' {
-			if i != 0 {
-				contentEnd = i - 1
-			}
-			if contentStart < contentEnd {
-				// Trim spaces for given HTML node
-				text := strings.TrimSpace(html[contentStart:contentEnd])
-				// Split on strings as they define words
-				words := strings.Split(text, " ")
-				// If words are found and the text is not empty
-				if len(words) != 0 && len(text) != 0 {
-					for _, word := range words {
-						// Check if words can be parsed as float
-						_, err := strconv.ParseFloat(word, 64)
-						if err == nil {
-							count.Numbers++
-						}
-					}
-					// Add words of current node to the total amount of words
-					count.Words += len(words) - count.Numbers
-				}
-			}
-		}
-		if html[i] == '>' {
-			contentStart = i + 1
+	for _, word := range words {
+		// Check if words can be parsed as float
+		_, err := strconv.ParseFloat(word, 64)
+		if err == nil {
+			numbers++
 		}
 	}
+	count := Count{
+		Numbers: numbers,
+		Words:   len(words) - numbers,
+	}
+
 	c.writeMap(url, &count)
 }
 
@@ -158,42 +144,31 @@ func (c *Crawler) writeMap(key string, val *Count) {
 }
 
 func (c *Crawler) preProcessHTMLString(html string) (string, []string) {
-	if len(html) == 0 || html[0] != '<' {
-		// silently ignore non html strings
-		return "", nil
-	}
 	html = c.getHTMLBodyString(html)
 	html = strings.ReplaceAll(html, "\n", "")
 	nextURLs := c.GetNextURLs(html)
-	return html, nextURLs
+
+	re := regexp.MustCompile(`<[^>]*>`)
+	res := re.ReplaceAllString(html, "")
+	return strings.TrimSpace(res), nextURLs
 }
 
 func (c *Crawler) getHTMLBodyString(html string) string {
-	bodyStart := 0
-	bodyEnd := 0
-	// nolint: gomnd
-	for i := 0; i < len(html); i++ {
-		// Calculate the start position of the body element
-		if i+6 < len(html) && html[i:i+5] == "<body" {
-			for j := i + 5; j < len(html); j++ {
-				if html[j] == '>' {
-					bodyStart = j + 1
-					break
-				}
-			}
+	re := regexp.MustCompile(`<body\b[^>]*>([\s\S]*?)<\/body>`)
+	body := re.FindAllString(html, -1)
+	if len(body) == 0 {
+		if strings.HasPrefix(html, "<?xml") {
+			return html
 		}
-		// Calculate the end position of the body element
-		if i+7 < len(html) && html[i:i+7] == "</body>" {
-			bodyEnd = i
-		}
+		return ""
 	}
 
 	// Remove possible script elements nested in the body tag
-	re := regexp.MustCompile(`<script(.*)<\/script>`)
-	res := re.ReplaceAllString(html[bodyStart:bodyEnd], "")
+	re = regexp.MustCompile(`<script\b[^>]*>([\s\S]*?)<\/script>`)
+	res := re.ReplaceAllString(body[0], "")
 
 	// Remove possible style elements nested in the body tag
-	re = regexp.MustCompile(`<style(.*)<\/style>`)
+	re = regexp.MustCompile(`<style\b[^>]*>([\s\S]*?)<\/style>`)
 	res = re.ReplaceAllString(res, "")
 
 	return res
@@ -280,7 +255,7 @@ func (c *Crawler) waitUntilDone() {
 		}
 	}
 	if c.Opts.Verbose {
-		fmt.Printf("Visited: %d URLS\n", requestsDone)
+		fmt.Printf("Visited: %d URLS\n", len(c.Counter))
 	}
 	c.PrintResults()
 }
